@@ -13,20 +13,12 @@ rocket_radius = diameter / 2
 fuel_mass = mass_at_launch - mass_after_burn  # weight of fuel
 mass_loss = fuel_mass / burn_time  # mass loss rate
 
-mass_at_time = []
-time_Interval = []
-effects_gravity = []
-rocket_velocity = []
-resultant_force_list = []
-rocket_acceleration = []
-drag_at_time = []
-air_density = []
 pos_y_list = []
 
-dt = 0.2
+dt = 1/100
 drag_coeff = 0.75
 
-#Air density constants
+# Air density constants
 sea_level_pressure = 101325  # sea level standard atmospheric pressure measured in Pa
 sea_level_temp = 288.15  # sea level standard temp measure in K
 grav_accel = 9.8  # earth surface gravitaional accel measured in m/s
@@ -38,72 +30,76 @@ iterations = int((5 * (burn_time / dt)) + 1)
 
 planet_gravity = 9.8  # TODO param
 
-def get_air_density(current_height):
-    temp_at_alt = sea_level_temp - temp_lapse_rate*current_height #calcs temp at altitude
+# dump
+
+
+def get_air_density_old(current_height):
+    temp_at_alt = sea_level_temp - temp_lapse_rate*current_height  # calcs temp at altitude
     pressure_at_alt = sea_level_pressure*(1 - (temp_lapse_rate*current_height)/sea_level_temp)**((grav_accel*molar_mass_air)/(gas_constant*temp_lapse_rate)) #calcs pressure at altitude
     return (pressure_at_alt*molar_mass_air) / (gas_constant*temp_at_alt)
 
 
-def calcMassAtTime(planet_grav): ##mass of rocket at any time t. Requires burn time, mass before launch, and loss of mass rate
-    for t in range(0, iterations):
-        if t >= (burn_time / dt):
-            mass_at_time.append(mass_after_burn)
-        else:
-            mass_at_time.append(mass_at_launch - mass_loss * (t * dt)) #mass as a function of time
+def get_air_density_new(current_height):
+    if current_height < 2500:
+        return 1.225
+    elif current_height < 5000:
+        return 0.898
+    elif current_height < 7500:
+        return 0.642
+    elif current_height < 10000:
+        return 0.446
+    elif current_height < 15000:
+        return 0.288
+    elif current_height < 20000:
+        return 0.108
+    elif current_height < 25000:
+        return 0.040
+    elif current_height < 30000:
+        return 0.015
+    elif current_height < 40000:
+        return 0.006
+    elif current_height < 50000:
+        return 0.001
+    else:
+        return 0
 
-        effects_gravity.append(planet_grav*mass_at_time[t]) #part of net force calculation - (W)
 
-        planet_grav * mass_at_launch - mass_loss * (t * dt)
-
-
+# TODO turn to class at some point?
 def velocity_of_rocket():
     pos_y = 0
     velocity = 0
-    #pos_y_list.append(pos_y) why ignore?
+    pos_y_list.append(pos_y)
     mass = mass_at_launch
+    average_thrust = (start_thrust + end_thrust) / 2
 
     for t in range(0, iterations):
         if t == 243:
             print("break")
 
-        if t >= (burn_time / dt):
-            average_thrust = 0
-        else:
-            average_thrust = (start_thrust + end_thrust) / 2
-
-        drag_force = 0.5 * get_air_density(pos_y) * cross_section * velocity
+        drag_force = 0.5 * get_air_density_old(pos_y) * velocity**2 * drag_coeff * cross_section
         resultant_force = average_thrust - ((mass * planet_gravity) + drag_force)
 
         accel = resultant_force / mass
 
-        new_velocity = velocity + (accel * dt)
-        new_pos_y = pos_y + (new_velocity * dt)
+        velocity = velocity + (accel * dt)
+        pos_y = pos_y + (velocity * dt)
 
-        velocity = new_velocity
-        pos_y = new_pos_y
         pos_y_list.append(pos_y)
 
         if t >= (burn_time / dt):
+            average_thrust = 0
             mass = mass_after_burn
         else:
+            average_thrust = (start_thrust + end_thrust) / 2
             mass = mass - (mass_loss * dt)
 
 
-
-def earth(): ##calculation for earth
-    planet_grav = 9.8 #planets gravity
-    calcMassAtTime(planet_grav)
+def earth():  # calculation for earth
     velocity_of_rocket()
-    #print(rocket_acceleration, "\n")
-    #print(rocket_velocity)
-    print(pos_y_list)  # TODO fix!
+    print(pos_y_list)  # TODO fix! global var
     print("done")
-    plt.plot(range(0, iterations), pos_y_list)
+    plt.plot(range(0, iterations + 1), pos_y_list)
     plt.show()
 
-
-def Kerbin():
-    planet_grav = 9.8 #analogus to earth
-    calcMassAtTime(planet_grav)
 
 earth()
