@@ -1,11 +1,13 @@
 import math
 import matplotlib.pyplot as plt
+import numpy as np
 
-mass_at_launch = 4.6 * 1000  # float(thingy.d)
-mass_after_burn = 2.6 * 1000  # float(thingy.e)
-burn_time = 29  # int(thingy.f)
-start_thrust = 167.79 * 1000  # float(thingy.h)
-end_thrust = 245 * 1000  # float(thingy.j)
+mass_at_launch = 6.6 * 1000
+mass_after_burn = 2.6 * 1000
+burn_time = 51
+asl_thrust = 205.53 * 1000
+vac_thrust = 240 * 1000
+launch_pad_y = 75
 
 diameter = 1.3
 rocket_radius = diameter / 2
@@ -14,9 +16,14 @@ fuel_mass = mass_at_launch - mass_after_burn  # weight of fuel
 mass_loss = fuel_mass / burn_time  # mass loss rate
 
 pos_y_list = []
+drag_force_list = []
+accel_list = []
+velocity_list = []
+mass_list = []
+thrust_list = []
 
 dt = 1/100
-drag_coeff = 0.75
+drag_coeff = 0.0
 
 # Air density constants
 sea_level_pressure = 101325  # sea level standard atmospheric pressure measured in Pa
@@ -26,80 +33,109 @@ temp_lapse_rate = 0.0065  # measure in K/m
 gas_constant = 8.31447  # ideal universal gas constant measured in J/(mol K)
 molar_mass_air = 0.0289654  # molar mass of dry air measured in kg/mol
 cross_section = math.pi * rocket_radius**2
-iterations = int((5 * (burn_time / dt)) + 1)
+iterations = int((15 * (burn_time / dt)) + 1)
+kerbin_atm_cutoff = 44000
+vaccum_h = 70000
 
-planet_gravity = 9.8  # TODO param
+gravity_constant = 6.67430*10**(-11)
+kerbin_mass = 5.2915158*10**22
+kerbin_radius = 600000
 
-# dump
-
-
-def get_air_density_old(current_height):
-    temp_at_alt = sea_level_temp - temp_lapse_rate*current_height  # calcs temp at altitude
-    pressure_at_alt = sea_level_pressure*(1 - (temp_lapse_rate*current_height)/sea_level_temp)**((grav_accel*molar_mass_air)/(gas_constant*temp_lapse_rate)) #calcs pressure at altitude
-    return (pressure_at_alt*molar_mass_air) / (gas_constant*temp_at_alt)
-
-
-def get_air_density_new(current_height):
-    if current_height < 2500:
-        return 1.225
-    elif current_height < 5000:
-        return 0.898
-    elif current_height < 7500:
-        return 0.642
-    elif current_height < 10000:
-        return 0.446
-    elif current_height < 15000:
-        return 0.288
-    elif current_height < 20000:
-        return 0.108
-    elif current_height < 25000:
-        return 0.040
-    elif current_height < 30000:
-        return 0.015
-    elif current_height < 40000:
-        return 0.006
-    elif current_height < 50000:
-        return 0.001
+def get_air_density(current_height):
+    if current_height < kerbin_atm_cutoff:
+        temp_at_alt = sea_level_temp - temp_lapse_rate*current_height  # calcs temp at altitude
+        pressure_at_alt = sea_level_pressure*(1 - (temp_lapse_rate*current_height)/sea_level_temp)**((grav_accel*molar_mass_air)/(gas_constant*temp_lapse_rate)) #calcs pressure at altitude
+        return (pressure_at_alt*molar_mass_air) / (gas_constant*temp_at_alt)
     else:
         return 0
 
 
+def get_thrust(asl_t, vac_t, h):
+    return min(vac_t, ((h / vaccum_h) * (vac_t - asl_t)) + asl_t)
+
+
 # TODO turn to class at some point?
 def velocity_of_rocket():
-    pos_y = 0
+    pos_y = launch_pad_y
     velocity = 0
-    pos_y_list.append(pos_y)
     mass = mass_at_launch
-    average_thrust = (start_thrust + end_thrust) / 2
+    thrust = get_thrust(asl_thrust, vac_thrust, pos_y)
 
-    for t in range(0, iterations):
-        if t == 243:
-            print("break")
+    pos_y_list.append(pos_y)
+    drag_force_list.append(0)
+    velocity_list.append(velocity)
+    mass_list.append(mass)
+    thrust_list.append(thrust)
 
-        drag_force = 0.5 * get_air_density_old(pos_y) * velocity**2 * drag_coeff * cross_section
-        resultant_force = average_thrust - ((mass * planet_gravity) + drag_force)
+    for i in range(iterations):
+        drag_force = 0.5 * get_air_density(pos_y) * velocity**2 * drag_coeff * cross_section
+        force_gravity = gravity_constant * ((mass * kerbin_mass) / (pos_y + kerbin_radius)**2)
+
+        if velocity >= 0:
+            resultant_force = thrust - (force_gravity + drag_force)
+        else:
+            resultant_force = drag_force - force_gravity
 
         accel = resultant_force / mass
 
         velocity = velocity + (accel * dt)
         pos_y = pos_y + (velocity * dt)
 
-        pos_y_list.append(pos_y)
-
-        if t >= (burn_time / dt):
-            average_thrust = 0
+        if i >= (burn_time / dt):
+            thrust = 0
             mass = mass_after_burn
         else:
-            average_thrust = (start_thrust + end_thrust) / 2
+            thrust = get_thrust(asl_thrust, vac_thrust, pos_y)
             mass = mass - (mass_loss * dt)
+
+        pos_y_list.append(pos_y)
+        drag_force_list.append(drag_force)
+        accel_list.append(accel)
+        velocity_list.append(velocity)
+        mass_list.append(mass)
+        thrust_list.append(thrust)
+
+
+def sub_plot():
+    plt.subplot(2, 3, 1)
+    time = np.asarray(range(iterations)) * dt
+    time_1 = np.asarray(range(iterations + 1)) * dt
+    plt.plot(time_1, pos_y_list)
+    plt.title('Height')
+
+    plt.subplot(2, 3, 2)
+    plt.plot(time, accel_list)
+    plt.title('Acceleration')
+
+    plt.subplot(2, 3, 3)
+    plt.plot(time_1, velocity_list)
+    plt.title('Velocity')
+
+    plt.subplot(2, 3, 4)
+    plt.plot(time_1, drag_force_list)
+    plt.title('Drag')
+
+    plt.subplot(2, 3, 5)
+    plt.plot(time_1, mass_list)
+    plt.title('Height')
+
+    plt.subplot(2, 3, 6)
+    plt.plot(time_1, thrust_list)
+    plt.title('Thrust')
+
+    plt.show()
 
 
 def earth():  # calculation for earth
     velocity_of_rocket()
-    print(pos_y_list)  # TODO fix! global var
-    print("done")
-    plt.plot(range(0, iterations + 1), pos_y_list)
-    plt.show()
+    #print(pos_y_list)  # TODO fix! global var?
+    #plt.plot(range(iterations + 1), pos_y_list)
+    #plt.plot(range(iterations), accel_list)
+    #plt.plot(range(iterations + 1), velocity_list)
+    #plt.plot(range(iterations + 1), drag_force_list)
+    #plt.plot(range(iterations + 1), mass_list)
+    #plt.show()
+    sub_plot()
 
 
 earth()
